@@ -1,0 +1,2 @@
+# Dependencies to be packaged in the Lambda Layer
+opencv-python-headless

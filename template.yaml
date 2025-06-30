@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Builds and tests a video frame extractor application.
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: fiap-video-processor-bucket
+    Description: The name of the S3 bucket for source videos and processed output.
+
+Resources:
+  # --- S3 Bucket ---
+  VideoProcessingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      AccessControl: Private
+  
+  # --- SQS Queues ---
+  ProcessVideoCompletedQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcessVideoCompletedQueueDLQ.Arn
+        maxReceiveCount: 3
+
+  ProcessVideoCompletedQueueDLQ:
+    Type: AWS::SQS::Queue
+    Description: Dead-letter queue for the ProcessVideoCompletedQueue.
+
+  # --- SSM Parameters ---
+  BucketParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /fiap-video-processor/video-processor/bucket-name'
+      Type: String
+      Value: !Ref VideoProcessingBucket
+      Description: S3 bucket name for video processing
+
+  NotificationQueueUrlParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /fiap-video-processor/video-processor/notification-queue-url'
+      Type: String
+      Value: !Ref ProcessVideoCompletedQueue
+      Description: SQS queue URL for processing completion notifications
+
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: VideoExtractorDependencies
+      ContentUri: ./lambda-layer/
+      CompatibleRuntimes:
+        - python3.9
+    Metadata:
+      BuildProperties:
+        Manifest: requirements-layer.txt
+      BuildMethod: python3.9
+      BuildArchitecture: x86_64
+      BuildCommand: pip install -r requirements-layer.txt -t python/lib/python3.9/site-packages/
+
+  VideoExtractorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: video-frame-extractor-function
+      Runtime: python3.9
+      CodeUri: .
+      Handler: src/lambda_function.lambda_handler
+      Timeout: 300
+      MemorySize: 1024
+      Layers:
+        - !Ref DependenciesLayer
+      Environment:
+        Variables:
+          NOTIFICATION_QUEUE_URL: !Ref ProcessVideoCompletedQueue
+          OUTPUT_BUCKET_NAME: !Ref VideoProcessingBucket
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref BucketName
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ProcessVideoCompletedQueue.QueueName
+        # For local dev, a broad policy is acceptable. Terraform should use a scoped-down policy.
+        - Statement:
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: '*'
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt VideoQueue.Arn
+            BatchSize: 1
+  

@@ -1,0 +1,11 @@
+# Dependencies for local development and testing
+boto3
+opencv-python-headless
+
+# Linting and formatting tools
+black
+flake8
+
+# Testing frameworks
+pytest
+pytest-cov
