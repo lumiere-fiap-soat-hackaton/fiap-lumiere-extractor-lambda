@@ -19,11 +19,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-region: ${{ secrets.AWS_REGION }}
-    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -54,6 +49,8 @@ jobs:
         black --check src/
     
     - name: Run tests
+      env:
+        AWS_REGION: ${{ env.AWS_REGION }}
       run: |
         python -m pytest tests/ -v --cov=src/ --cov-report=html
     
