@@ -12,15 +12,19 @@ env:
   DEPENDENCY_LAYER_NAME: VideoExtractorDependencies
   PYTHON_VERSION: '3.9'
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   lint-and-test:
     name: Lint and Test
     runs-on: ubuntu-latest
     steps:
-    - name: Set AWS region
-      run: echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
-
     - uses: actions/checkout@v4
+
+    - name: Set default AWS Region
+      run: echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
 
     - name: Set up Python
       uses: actions/setup-python@v4
