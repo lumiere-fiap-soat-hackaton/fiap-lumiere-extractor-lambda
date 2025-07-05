@@ -52,11 +52,11 @@ class VideoProcessingService:
             frames_output_dir = os.path.join(tmpdir, request_id, "frames")
             os.makedirs(frames_output_dir)
 
-            # Download the video file from S3
-            s3_handler.download_file(source_bucket, source_key, local_video_path)
-
-            # Process the video to extract frames
             try:
+                # Download the video file from S3
+                s3_handler.download_file(source_bucket, source_key, local_video_path)
+
+                # Process the video to extract frames
                 frame_count = video_processor.extract_frames(
                     local_video_path, frames_output_dir
                 )
@@ -74,7 +74,9 @@ class VideoProcessingService:
                     return
 
                 # Package resulting frames into a zip archive
-                local_zip_path = os.path.join(tmpdir, request_id, f"{base_filename}_frames.zip")
+                local_zip_path = os.path.join(
+                    tmpdir, request_id, f"{base_filename}_frames.zip"
+                )
                 utils.create_zip_archive(frames_output_dir, local_zip_path)
 
                 # Upload the zip archive back to S3
@@ -85,9 +87,11 @@ class VideoProcessingService:
                     bucket=self.output_bucket_name,
                     base_path=self.processed_base_path,
                     request_id=request_id,
-                    key=Path(local_zip_path).name
+                    key=Path(local_zip_path).name,
                 )
-                s3_handler.upload_file(local_zip_path, self.output_bucket_name, output_key)
+                s3_handler.upload_file(
+                    local_zip_path, self.output_bucket_name, output_key
+                )
 
                 # Notify completion via SQS
                 sqs_handler.send_completion_notification(

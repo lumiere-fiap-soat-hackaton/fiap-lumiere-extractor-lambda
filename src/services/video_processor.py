@@ -15,18 +15,20 @@ def extract_frames(video_path: str, output_dir: str) -> int:
     frame_count = 0
     logger.info(f"Starting frame extraction from {Path(video_path).name}...")
 
-    while True:
-        success, frame = video_capture.read()
-        if not success:
-            break
+    try:
+        while True:
+            success, frame = video_capture.read()
+            if not success:
+                break
 
-        frame_filename = os.path.join(output_dir, f"frame_{frame_count:08d}.jpg")
-        cv2.imwrite(frame_filename, frame)
-        frame_count += 1
+            frame_filename = os.path.join(output_dir, f"frame_{frame_count:08d}.jpg")
+            cv2.imwrite(frame_filename, frame)
+            frame_count += 1
 
-        if frame_count % 100 == 0:
-            logger.info(f"Extracted {frame_count} frames...")
+            if frame_count % 100 == 0:
+                logger.info(f"Extracted {frame_count} frames...")
+    finally:
+        video_capture.release()
 
-    video_capture.release()
     logger.info(f"Finished extraction. Total frames: {frame_count}")
     return frame_count

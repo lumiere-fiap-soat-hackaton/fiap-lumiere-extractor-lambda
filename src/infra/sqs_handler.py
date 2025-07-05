@@ -8,10 +8,7 @@ sqs_client = boto3.client("sqs")
 
 
 def send_completion_notification(
-    queue_url: str,
-    request_id: str,
-    result_s3_path: str,
-    status: str
+    queue_url: str, request_id: str, result_s3_path: str, status: str
 ) -> None:
     """
     Sends a job completion notification to a specified SQS queue.

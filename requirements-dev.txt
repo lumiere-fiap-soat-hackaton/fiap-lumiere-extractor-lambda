@@ -9,3 +9,4 @@ flake8
 # Testing frameworks
 pytest
 pytest-cov
+moto[s3,sqs]
