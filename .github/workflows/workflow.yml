@@ -17,6 +17,9 @@ jobs:
     name: Lint and Test
     runs-on: ubuntu-latest
     steps:
+    - name: Set AWS region
+      run: echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
+
     - uses: actions/checkout@v4
 
     - name: Set up Python
@@ -49,8 +52,6 @@ jobs:
         black --check src/
     
     - name: Run tests
-      env:
-        AWS_REGION: ${{ env.AWS_REGION }}
       run: |
         python -m pytest tests/ -v --cov=src/ --cov-report=html
     
