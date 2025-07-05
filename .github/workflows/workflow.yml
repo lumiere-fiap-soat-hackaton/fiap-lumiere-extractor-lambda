@@ -8,6 +8,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
   LAMBDA_FUNCTION_NAME: FiapLumiereMediaProcessorLambda
   DEPENDENCY_LAYER_NAME: VideoExtractorDependencies
   PYTHON_VERSION: '3.9'
