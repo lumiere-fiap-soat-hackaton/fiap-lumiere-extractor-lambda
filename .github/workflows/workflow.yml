@@ -24,9 +24,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set default AWS Region
-      run: echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
-
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
