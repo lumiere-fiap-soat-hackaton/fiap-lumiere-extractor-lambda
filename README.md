@@ -69,30 +69,56 @@ This application provides a robust, scalable, and event-driven serverless workfl
     ```
     Check your terminal for logs. A ZIP file should appear in your S3 bucket, and a notification message should appear in your test notification queue.
 
-## Building and Deploying with Terraform
+## CI/CD Pipeline
 
-1.  **Build Artifacts:** Run `sam build --use-container`. This will create the function and layer ZIP files in the `.aws-sam/build` directory.
+This project includes a robust CI/CD pipeline using GitHub Actions that automates testing, building, and deployment of the Lambda function.
 
-2.  **Terraform Deployment:** Your Terraform configuration is responsible for:
-    *   Creating the S3 bucket.
-    *   Creating two SQS queues: one for jobs and one for notifications (along with a DLQ for the job queue).
-    *   Creating the necessary IAM roles and policies.
-    *   Creating the `aws_lambda_layer_version` resource, pointing to the layer ZIP file from the build step.
-    *   Creating the `aws_lambda_function` resource, pointing to the function ZIP file and attaching the layer.
-    *   **Crucially**, setting the `NOTIFICATION_QUEUE_URL` environment variable on the Lambda function, providing the URL of the notification queue it just created.
+### Features
 
-## How to Use the Deployed Application
+- **Automated Testing**: Runs linting, formatting checks, and unit tests on every push and pull request
+- **Build Automation**: Creates deployment packages for both Lambda function and layer
+- **Deployment**: Automatically deploys to AWS Lambda when changes are pushed to the main branch
+- **Verification**: Validates successful deployment and function configuration
 
-1.  **Get the Job SQS Queue URL** from your Terraform outputs.
-2.  **Send a Message** with a unique `request_id` and the `s3_path` to the job queue.
-    ```bash
-    # Replace with your values from Terraform
-    JOB_QUEUE_URL="YOUR_JOB_QUEUE_URL"
-    S3_VIDEO_PATH="s3://your-bucket-name/videos/my-awesome-video.mp4"
-    REQUEST_ID=$(uuidgen | tr '[:upper:]' '[:lower:]') # Generate a UUID
+### Setup
 
-    aws sqs send-message \
-      --queue-url "$JOB_QUEUE_URL" \
-      --message-body "{\"s3_path\": \"$S3_VIDEO_PATH\", \"request_id\": \"$REQUEST_ID\"}"
-    ```
-3.  **Monitor the Notification Queue** to receive the completion event.
+1. **Configure GitHub Secrets**: Add the following secrets to your GitHub repository:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_SESSION_TOKEN`
+
+2. **Deploy**: Push code to the `main` branch to trigger automatic deployment
+
+### Documentation
+
+- [CI/CD Pipeline Documentation](docs/CICD_PIPELINE.md) - Detailed pipeline architecture and configuration
+- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) - Step-by-step deployment instructions
+
+### Local Deployment Script
+
+For manual deployment and testing, use the provided deployment script:
+
+```bash
+# Run full pipeline (test, build, deploy)
+./bin/deploy.sh
+
+# Run tests only
+./bin/deploy.sh test
+
+# Build only
+./bin/deploy.sh build
+
+# Deploy only (requires existing build)
+./bin/deploy.sh deploy
+
+# Clean build artifacts
+./bin/deploy.sh clean
+```
+
+### Pipeline Status
+
+The pipeline runs on:
+- **Push to main**: Full pipeline including deployment
+- **Pull requests**: Linting and testing only
+
+Monitor pipeline execution in the **Actions** tab of your GitHub repository.
