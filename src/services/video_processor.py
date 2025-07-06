@@ -25,7 +25,7 @@ def extract_frames(video_path: str, output_dir: str) -> int:
             cv2.imwrite(frame_filename, frame)
             frame_count += 1
 
-            if frame_count % 100 == 0:
+            if frame_count > 0 and frame_count % 100 == 0:
                 logger.info(f"Extracted {frame_count} frames...")
     finally:
         video_capture.release()
