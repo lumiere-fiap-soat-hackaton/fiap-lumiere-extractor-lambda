@@ -1,0 +1,21 @@
+[run]
+source = src
+omit = 
+    src/lambda_function.py
+    src/__*.py
+    src/infra/config.py
+    src/*/__init__.py
+    src/*/*/__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+show_missing = true
+skip_covered = false
+
+[html]
+directory = htmlcov

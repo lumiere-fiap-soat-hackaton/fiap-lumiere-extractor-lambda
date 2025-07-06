@@ -24,6 +24,7 @@ def init():
     os.environ["BUCKET_NAME"] = get_config_parameter(
         "BUCKET_NAME", with_decryption=False
     )
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
 def get_config_parameter(name: str, with_decryption: bool = False) -> str:
