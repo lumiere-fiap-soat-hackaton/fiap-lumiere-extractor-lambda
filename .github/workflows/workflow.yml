@@ -48,6 +48,13 @@ jobs:
         run: |
           python -m pytest tests/ -v --cov=src/ --cov-report=xml --cov-report=html
 
+      - name: Instalar SonarScanner
+
+        run: |
+          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
+          unzip sonar-scanner.zip -d $HOME
+          echo "$HOME/sonar-scanner-4.8.0.2856-linux/bin" >> $GITHUB_PATH
+
       - name: Enviar cobertura ao SonarCloud
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
