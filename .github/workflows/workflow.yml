@@ -12,6 +12,8 @@ env:
   LAMBDA_FUNCTION_NAME: FiapLumiereMediaProcessorLambda
   DEPENDENCY_LAYER_NAME: VideoExtractorDependencies
   PYTHON_VERSION: '3.9'
+  DIST_DIR: dist
+  S3_BUCKET: fiap-lumiere-lambda-code-bucket
 
 permissions:
   contents: read
@@ -55,7 +57,7 @@ jobs:
     
     - name: Run tests
       run: |
-        python -m pytest tests/ -v --cov=src/ --cov-report=html
+        python -m pytest tests/ -v --cov=src/ --cov-report=xml --cov-report=html
     
     - name: Upload coverage HTML report
       uses: actions/upload-artifact@v4
@@ -85,108 +87,24 @@ jobs:
         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
         aws-region: ${{ env.AWS_REGION }}
     
-    - name: Build Lambda Layer
+    - name: Build Lambda Layer and Function
       run: |
-        # Create layer directory structure
-        mkdir -p lambda-layer-build/python/lib/python3.9/site-packages
+        # Make deploy script executable
+        chmod +x bin/deploy.sh
         
-        # Install layer dependencies
-        pip install -r lambda-layer/requirements.txt -t lambda-layer-build/python/lib/python3.9/site-packages/
-        
-        # Create layer zip
-        cd lambda-layer-build
-        zip -r ../lambda-layer.zip .
-        cd ..
+        # Use deploy script to build both layer and function
+        ./bin/deploy.sh build
     
-    - name: Build Lambda Function
+    - name: Deploy Lambda Layer and Function
       run: |
-        # Create function directory
-        mkdir -p lambda-function-build
-        
-        # Copy source code
-        cp -r src/* lambda-function-build/
-        
-        # Install function dependencies (if any)
-        if [ -f requirements.txt ]; then
-          pip install -r requirements.txt -t lambda-function-build/
-        fi
-        
-        # Create function zip
-        cd lambda-function-build
-        zip -r ../lambda-function.zip .
-        cd ..
-    
-    - name: Get current layer version
-      id: get-layer-version
-      run: |
-        # Get the current layer version ARN
-        LAYER_VERSION=$(aws lambda list-layer-versions \
-          --layer-name ${{ env.DEPENDENCY_LAYER_NAME }} \
-          --query 'LayerVersions[0].LayerVersionArn' \
-          --output text 2>/dev/null || echo "")
-        echo "current_layer_version=$LAYER_VERSION" >> $GITHUB_OUTPUT
-    
-    - name: Update Lambda Layer
-      id: update-layer
-      run: |
-        # Check if layer exists and if layer.zip has changes
-        LAYER_ARN=$(aws lambda publish-layer-version \
-          --layer-name ${{ env.DEPENDENCY_LAYER_NAME }} \
-          --description "Dependencies for FIAP Lumiere Media Processor Lambda - $(date)" \
-          --zip-file fileb://lambda-layer.zip \
-          --compatible-runtimes python3.9 \
-          --query 'LayerVersionArn' \
-          --output text)
-        
-        echo "New layer version: $LAYER_ARN"
-        echo "layer_version_arn=$LAYER_ARN" >> $GITHUB_OUTPUT
-    
-    - name: Update Lambda Function Code
-      run: |
-        # Update function code
-        aws lambda update-function-code \
-          --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-          --zip-file fileb://lambda-function.zip
-        
-        # Wait for the update to complete
-        aws lambda wait function-updated \
-          --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
-    
-    - name: Update Lambda Function Configuration
-      run: |
-        # Update function configuration to use the new layer version
-        aws lambda update-function-configuration \
-          --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-          --layers ${{ steps.update-layer.outputs.layer_version_arn }}
-        
-        # Wait for the configuration update to complete
-        aws lambda wait function-updated \
-          --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
-    
-    - name: Verify Deployment
-      run: |
-        # Get function information to verify deployment
-        FUNCTION_INFO=$(aws lambda get-function \
-          --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-          --query 'Configuration.[FunctionName,Runtime,Handler,LastModified]' \
-          --output table)
-        
-        echo "Function deployment verified:"
-        echo "$FUNCTION_INFO"
-        
-        # Test function (optional - remove if not needed)
-        echo "Testing function invocation..."
-        aws lambda invoke \
-          --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-          --payload '{"Records":[{"body":"{\"test\":true}"}]}' \
-          --log-type Tail \
-          response.json || echo "Test invocation failed - this is expected if the function requires specific SQS message format"
+        # Use deploy script for deployment
+        ./bin/deploy.sh deploy
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: lambda-deployment-artifacts
         path: |
-          lambda-function.zip
-          lambda-layer.zip
+          ${{ env.DIST_DIR }}/lambda-function.zip
+          ${{ env.DIST_DIR }}/lambda-layer.zip
         retention-days: 30

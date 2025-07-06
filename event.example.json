@@ -1,0 +1,20 @@
+{
+  "Records": [
+    {
+      "messageId": "19dd0b57-b21e-4ac1-bd88-01bbb068cb78",
+      "receiptHandle": "MessageReceiptHandle",
+      "body": "{\"s3_path\": \"s3://fiap-video-processor-bucket/videos/b8a5e5a2-39c2-4a0b-99f8-5be4523e13d9/NyanCat.mp4\", \"request_id\": \"b8a5e5a2-39c2-4a0b-99f8-5be4523e13d9\"}",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1523232000000",
+        "SenderId": "AIDAISD5355EXAMPLE",
+        "ApproximateFirstReceiveTimestamp": "1523232000001"
+      },
+      "messageAttributes": {},
+      "md5OfBody": "some-md5-hash",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:VideoQueue",
+      "awsRegion": "us-east-1"
+    }
+  ]
+}
