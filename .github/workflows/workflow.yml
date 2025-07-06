@@ -67,7 +67,7 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
         run: |
-          SCANNER_META_PATH="$(pwd)/.scanner-meta.properties"
+          export PATH=$JAVA_HOME/bin:$PATH
           sonar-scanner \
             -Dsonar.projectKey=lumiere-fiap-soat-hackaton_fiap-lumiere-media-processor-lambda \
             -Dsonar.organization=lumiere-fiap-soat-hackaton \
