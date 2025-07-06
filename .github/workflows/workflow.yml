@@ -12,6 +12,8 @@ env:
   LAMBDA_FUNCTION_NAME: FiapLumiereMediaProcessorLambda
   DEPENDENCY_LAYER_NAME: VideoExtractorDependencies
   PYTHON_VERSION: '3.9'
+  DIST_DIR: dist
+  S3_BUCKET: fiap-lumiere-lambda-code-bucket
 
 permissions:
   contents: read
@@ -85,55 +87,43 @@ jobs:
         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
         aws-region: ${{ env.AWS_REGION }}
     
-    - name: Build Lambda Layer
+    - name: Build Lambda Layer and Function
       run: |
-        # Create layer directory structure
-        mkdir -p lambda-layer-build/python/lib/python3.9/site-packages
+        # Make deploy script executable
+        chmod +x bin/deploy.sh
         
-        # Install layer dependencies
-        pip install -r lambda-layer/requirements.txt -t lambda-layer-build/python/lib/python3.9/site-packages/
-        
-        # Create layer zip
-        cd lambda-layer-build
-        zip -r ../lambda-layer.zip .
-        cd ..
+        # Use deploy script to build both layer and function
+        ./bin/deploy.sh build
     
-    - name: Build Lambda Function
+    - name: Upload artifacts to S3
       run: |
-        # Create function directory
-        mkdir -p lambda-function-build
+        # Create S3 keys with timestamp for versioning
+        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+        LAYER_S3_KEY="layers/lambda-layer-${TIMESTAMP}.zip"
+        FUNCTION_S3_KEY="functions/lambda-function-${TIMESTAMP}.zip"
         
-        # Copy source code
-        cp -r src/* lambda-function-build/
+        # Upload layer zip to S3
+        aws s3 cp ${{ env.DIST_DIR }}/lambda-layer.zip s3://${{ env.S3_BUCKET }}/$LAYER_S3_KEY
         
-        # Install function dependencies (if any)
-        if [ -f requirements.txt ]; then
-          pip install -r requirements.txt -t lambda-function-build/
-        fi
+        # Upload function zip to S3
+        aws s3 cp ${{ env.DIST_DIR }}/lambda-function.zip s3://${{ env.S3_BUCKET }}/$FUNCTION_S3_KEY
         
-        # Create function zip
-        cd lambda-function-build
-        zip -r ../lambda-function.zip .
-        cd ..
-    
-    - name: Get current layer version
-      id: get-layer-version
-      run: |
-        # Get the current layer version ARN
-        LAYER_VERSION=$(aws lambda list-layer-versions \
-          --layer-name ${{ env.DEPENDENCY_LAYER_NAME }} \
-          --query 'LayerVersions[0].LayerVersionArn' \
-          --output text 2>/dev/null || echo "")
-        echo "current_layer_version=$LAYER_VERSION" >> $GITHUB_OUTPUT
+        # Store S3 keys for deployment
+        echo $LAYER_S3_KEY > .layer_s3_key
+        echo $FUNCTION_S3_KEY > .function_s3_key
+        
+        # Output for next steps
+        echo "LAYER_S3_KEY=$LAYER_S3_KEY" >> $GITHUB_ENV
+        echo "FUNCTION_S3_KEY=$FUNCTION_S3_KEY" >> $GITHUB_ENV
     
     - name: Update Lambda Layer
       id: update-layer
       run: |
-        # Check if layer exists and if layer.zip has changes
+        # Deploy layer from S3
         LAYER_ARN=$(aws lambda publish-layer-version \
           --layer-name ${{ env.DEPENDENCY_LAYER_NAME }} \
           --description "Dependencies for FIAP Lumiere Media Processor Lambda - $(date)" \
-          --zip-file fileb://lambda-layer.zip \
+          --content S3Bucket=${{ env.S3_BUCKET }},S3Key=$LAYER_S3_KEY \
           --compatible-runtimes python3.9 \
           --query 'LayerVersionArn' \
           --output text)
@@ -143,10 +133,11 @@ jobs:
     
     - name: Update Lambda Function Code
       run: |
-        # Update function code
+        # Update function code from S3
         aws lambda update-function-code \
           --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-          --zip-file fileb://lambda-function.zip
+          --s3-bucket ${{ env.S3_BUCKET }} \
+          --s3-key $FUNCTION_S3_KEY
         
         # Wait for the update to complete
         aws lambda wait function-updated \
@@ -187,6 +178,6 @@ jobs:
       with:
         name: lambda-deployment-artifacts
         path: |
-          lambda-function.zip
-          lambda-layer.zip
+          ${{ env.DIST_DIR }}/lambda-function.zip
+          ${{ env.DIST_DIR }}/lambda-layer.zip
         retention-days: 30

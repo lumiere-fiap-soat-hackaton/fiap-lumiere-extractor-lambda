@@ -79,3 +79,11 @@ env.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Lambda build files
+dist/**
+
+# Deployment artifacts
+.layer_arn
+.layer_s3_key
+.function_s3_key
