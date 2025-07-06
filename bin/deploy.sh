@@ -6,11 +6,11 @@
 set -e
 
 # Configuration
-AWS_REGION="us-east-1"
-LAMBDA_FUNCTION_NAME="FiapLumiereMediaProcessorLambda"
-LAYER_NAME="VideoExtractorDependencies"
-DIST_DIR="dist"
-S3_BUCKET="fiap-lumiere-lambda-code-bucket"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:-FiapLumiereMediaProcessorLambda}"
+LAYER_NAME="${DEPENDENCY_LAYER_NAME:-VideoExtractorDependencies}"
+DIST_DIR="${DIST_DIR:-dist}"
+S3_BUCKET="${S3_BUCKET:-fiap-lumiere-lambda-code-bucket}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -244,7 +244,8 @@ show_help() {
     echo "  S3_BUCKET: $S3_BUCKET"
     echo "  AWS_REGION: $AWS_REGION"
     echo "  LAMBDA_FUNCTION_NAME: $LAMBDA_FUNCTION_NAME"
-    echo "  LAYER_NAME: $LAYER_NAME"
+    echo "  DEPENDENCY_LAYER_NAME: $LAYER_NAME"
+    echo "  DIST_DIR: $DIST_DIR"
     echo ""
     echo "Examples:"
     echo "  $0            # Run full pipeline"
