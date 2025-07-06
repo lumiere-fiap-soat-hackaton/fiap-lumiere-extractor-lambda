@@ -62,22 +62,21 @@ jobs:
           echo "$HOME/sonar-scanner-4.8.0.2856-linux/bin" >> $GITHUB_PATH    
 
       - name: Enviar cobertura ao SonarCloud
+        shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           export PATH=$JAVA_HOME/bin:$PATH
           export SONAR_SCANNER_OPTS="-Djava.home=$JAVA_HOME"
-      
-          sonar-scanner \
-            -Dsonar.projectKey="lumiere-fiap-soat-hackaton_fiap-lumiere-extractor-lambda" \
-            -Dsonar.organization="lumiere-fiap-soat-hackaton" \
-            -Dsonar.sources="src" \
-            -Dsonar.python.coverage.reportPaths="coverage.xml" \
-            -Dsonar.host.url="$SONAR_HOST_URL" \
-            -Dsonar.token="$SONAR_TOKEN" \
-            -Dsonar.scanner.metadataFilePath="$(pwd)/.scanner-meta.properties" \
-            -Dsonar.coverage.exclusions="**/common/**,**/__test__/**,**/main.py,**/configuration.py"
+          sonar-scanner -Dsonar.projectKey="lumiere-fiap-soat-hackaton_fiap-lumiere-extractor-lambda" \
+                        -Dsonar.organization="lumiere-fiap-soat-hackaton" \
+                        -Dsonar.sources="src" \
+                        -Dsonar.python.coverage.reportPaths="coverage.xml" \
+                        -Dsonar.host.url="$SONAR_HOST_URL" \
+                        -Dsonar.token="$SONAR_TOKEN" \
+                        -Dsonar.scanner.metadataFilePath="$(pwd)/.scanner-meta.properties" \
+                        -Dsonar.coverage.exclusions="**/common/**,**/__test__/**,**/main.py,**/configuration.py"
 
       - name: Validar Quality Gate do SonarCloud
         env:
