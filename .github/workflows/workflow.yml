@@ -54,6 +54,12 @@ jobs:
           curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
           unzip sonar-scanner.zip -d $HOME
           echo "$HOME/sonar-scanner-4.8.0.2856-linux/bin" >> $GITHUB_PATH
+        
+      - name: Configurar Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'    
 
       - name: Enviar cobertura ao SonarCloud
         env:
