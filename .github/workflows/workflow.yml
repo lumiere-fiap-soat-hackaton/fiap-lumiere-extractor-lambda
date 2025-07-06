@@ -54,10 +54,11 @@ jobs:
           java-version: '17'
 
       - name: Instalar SonarScanner
+        shell: bash
         run: |
           curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
           unzip sonar-scanner.zip -d $HOME
-          echo "$HOME/sonar-scanner-*/bin" >> $GITHUB_PATH
+          echo "$(echo $HOME/sonar-scanner-*/bin)" >> $GITHUB_PATH
 
       - name: Enviar cobertura ao SonarCloud
         shell: bash
@@ -83,4 +84,87 @@ jobs:
         run: |
           echo "Aguardando análise do SonarCloud finalizar..."
 
-          PROJECT_KEY="lumiere-fiap-soat-ha_
+          PROJECT_KEY="lumiere-fiap-soat-hackaton_fiap-lumiere-extractor-lambda"
+          META_PATH="$(pwd)/.scanner-meta.properties"
+
+          TASK_ID=$(grep ceTaskId "$META_PATH" | cut -d'=' -f2)
+
+          if [ -z "$TASK_ID" ]; then
+            echo "❌ Não foi possível encontrar ceTaskId. A análise pode ter falhado."
+            exit 1
+          fi
+
+          STATUS="PENDING"
+          while [ "$STATUS" != "SUCCESS" ] && [ "$STATUS" != "FAILED" ]; do
+            echo "⏳ Status da análise: $STATUS"
+            sleep 5
+            STATUS=$(curl -s -u $SONAR_TOKEN: "https://sonarcloud.io/api/ce/task?id=$TASK_ID" | jq -r '.task.status')
+          done
+
+          if [ "$STATUS" != "SUCCESS" ]; then
+            echo "❌ A análise falhou no SonarCloud (status: $STATUS)"
+            exit 1
+          fi
+
+          ANALYSIS_ID=""
+          while [ -z "$ANALYSIS_ID" ] || [ "$ANALYSIS_ID" == "null" ]; do
+            echo "⏳ Aguardando analysisId da task..."
+            sleep 3
+            ANALYSIS_ID=$(curl -s -u $SONAR_TOKEN: "https://sonarcloud.io/api/ce/task?id=$TASK_ID" | jq -r '.task.analysisId')
+          done
+
+          echo "🔍 Validando Quality Gate para análise $ANALYSIS_ID..."
+
+          QUALITY_GATE_STATUS=$(curl -s -u $SONAR_TOKEN: \
+            "https://sonarcloud.io/api/qualitygates/project_status?analysisId=$ANALYSIS_ID" \
+            | jq -r '.projectStatus.status')
+
+          if [ "$QUALITY_GATE_STATUS" != "OK" ]; then
+            echo -e "\n❌ Quality Gate falhou! Detalhes:"
+            curl -s -u $SONAR_TOKEN: \
+              "https://sonarcloud.io/api/qualitygates/project_status?analysisId=$ANALYSIS_ID" \
+              | jq -r '.projectStatus.conditions[] | select(.status != "OK") | "- Critério: \(.metric)\n  Valor atual: \(.actual // \"n/a\")\n  Status: \(.status)\n"'
+            echo -e "\n🔗 Ver detalhes: https://sonarcloud.io/dashboard?id=$PROJECT_KEY"
+            exit 1
+          else
+            echo -e "\n✅ Quality Gate aprovado."
+          fi
+
+  build-and-deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Lambda Layer e Function
+        run: |
+          chmod +x bin/deploy.sh
+          ./bin/deploy.sh build
+
+      - name: Deploy Lambda Layer e Function
+        run: |
+          ./bin/deploy.sh deploy
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-deployment-artifacts
+          path: |
+            ${{ env.DIST_DIR }}/lambda-function.zip
+            ${{ env.DIST_DIR }}/lambda-layer.zip
+          retention-days: 30
