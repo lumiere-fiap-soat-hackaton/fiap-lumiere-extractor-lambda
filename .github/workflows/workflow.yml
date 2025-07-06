@@ -44,8 +44,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Executar testes e gerar cobertura
-        # Remover, após criação dos testes.
-        if: ${{ false }}
+
         run: |
           python -m pytest tests/ -v --cov=src/ --cov-report=xml --cov-report=html
 
@@ -53,8 +52,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        # Remover, após criação dos testes.
-        if: ${{ false }}
+
         run: |
           SCANNER_META_PATH="$(pwd)/.scanner-meta.properties"
           sonar-scanner \
@@ -71,12 +69,11 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        # Remover, após criação dos testes.
-        if: ${{ false }}
+
         run: |
           echo "Aguardando análise do SonarCloud finalizar..."
 
-          PROJECT_KEY="lumiere-fiap-soat-hackaton_fiap-lumiere-media-processor-lambda"
+          PROJECT_KEY="lumiere-fiap-soat-hackaton_fiap-lumiere-extractor-lambda"
           META_PATH="$(pwd)/.scanner-meta.properties"
 
           TASK_ID=$(grep ceTaskId "$META_PATH" | cut -d'=' -f2)
