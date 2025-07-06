@@ -67,6 +67,7 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
         run: |
+          SCANNER_META_PATH="$(pwd)/.scanner-meta.properties"
           export PATH=$JAVA_HOME/bin:$PATH
           export SONAR_SCANNER_OPTS="-Djava.home=$JAVA_HOME"
           sonar-scanner \
