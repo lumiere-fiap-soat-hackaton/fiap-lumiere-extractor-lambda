@@ -67,7 +67,6 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
         run: |
-          SCANNER_META_PATH="$(pwd)/.scanner-meta.properties"
           export PATH=$JAVA_HOME/bin:$PATH
           export SONAR_SCANNER_OPTS="-Djava.home=$JAVA_HOME"
           sonar-scanner \
@@ -77,7 +76,7 @@ jobs:
             -Dsonar.python.coverage.reportPaths=coverage.xml \
             -Dsonar.host.url=$SONAR_HOST_URL \
             -Dsonar.token=$SONAR_TOKEN \
-            -Dsonar.scanner.metadataFilePath=$SCANNER_META_PATH \
+            -Dsonar.scanner.metadataFilePath="$(pwd)/.scanner-meta.properties" \
             -Dsonar.coverage.exclusions=**/common/**,**/__test__/**,**/main.py,**/configuration.py
 
       - name: Validar Quality Gate do SonarCloud
