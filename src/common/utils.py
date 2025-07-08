@@ -7,6 +7,15 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+def format_sqs_message(request_id: str, result_s3_path: str, status: str) -> dict:
+    """Formats a message for SQS notification."""
+    return {
+        "id": request_id,
+        "resultFileKey": result_s3_path,
+        "status": status,
+    }
+
+
 def format_s3_path(bucket: str, base_path: str, request_id: str, key: str) -> str:
     """Formats a bucket and key into a valid S3 path."""
     if not bucket or not key:

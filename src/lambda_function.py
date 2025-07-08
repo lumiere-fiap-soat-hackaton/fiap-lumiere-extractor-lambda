@@ -32,10 +32,12 @@ def lambda_handler(event: dict, context: object):
 
     for record in event.get("Records", []):
         try:
+            logger.info(f"Processing SQS message: {json.dumps(record)}")
+
             # 1. Parse the incoming event to extract the necessary input
             message_body = json.loads(record["body"])
-            s3_path = message_body["s3_path"]
-            request_id = message_body["request_id"]
+            s3_path = message_body["sourceFileKey"]
+            request_id = message_body["id"]
 
             # 2. Invoke the core application logic
             processing_svc.process_video(

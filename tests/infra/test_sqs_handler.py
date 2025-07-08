@@ -28,8 +28,8 @@ class TestSQSHandler:
         assert "Messages" in messages
 
         message_body = json.loads(messages["Messages"][0]["Body"])
-        assert message_body["request_id"] == aws_sqs_client["test_request_id"]
-        assert message_body["result_s3_path"] == aws_sqs_client["test_result_s3_path"]
+        assert message_body["id"] == aws_sqs_client["test_request_id"]
+        assert message_body["resultFileKey"] == aws_sqs_client["test_result_s3_path"]
         assert message_body["status"] == aws_sqs_client["test_status"]
 
     def test_given_failure_status_when_sending_notification_then_sends_failure_message(
@@ -54,8 +54,8 @@ class TestSQSHandler:
         assert "Messages" in messages
 
         message_body = json.loads(messages["Messages"][0]["Body"])
-        assert message_body["request_id"] == aws_sqs_client["test_request_id"]
-        assert message_body["result_s3_path"] == ""
+        assert message_body["id"] == aws_sqs_client["test_request_id"]
+        assert message_body["resultFileKey"] == ""
         assert message_body["status"] == "FAILURE"
 
     def test_given_no_frames_status_when_sending_notification_then_sends_no_frames_message(
@@ -80,8 +80,8 @@ class TestSQSHandler:
         assert "Messages" in messages
 
         message_body = json.loads(messages["Messages"][0]["Body"])
-        assert message_body["request_id"] == aws_sqs_client["test_request_id"]
-        assert message_body["result_s3_path"] == ""
+        assert message_body["id"] == aws_sqs_client["test_request_id"]
+        assert message_body["resultFileKey"] == ""
         assert message_body["status"] == "NO_FRAMES_EXTRACTED"
 
     def test_given_nonexistent_queue_when_sending_notification_then_raises_client_error(
@@ -126,8 +126,8 @@ class TestSQSHandler:
         assert "Messages" in messages
 
         message_body = json.loads(messages["Messages"][0]["Body"])
-        assert message_body["request_id"] == request_id
-        assert message_body["result_s3_path"] == result_path
+        assert message_body["id"] == request_id
+        assert message_body["resultFileKey"] == result_path
         assert message_body["status"] == aws_sqs_client["test_status"]
 
     def test_given_empty_result_path_when_sending_notification_then_handles_correctly(
@@ -152,8 +152,8 @@ class TestSQSHandler:
         assert "Messages" in messages
 
         message_body = json.loads(messages["Messages"][0]["Body"])
-        assert message_body["request_id"] == aws_sqs_client["test_request_id"]
-        assert message_body["result_s3_path"] == ""
+        assert message_body["id"] == aws_sqs_client["test_request_id"]
+        assert message_body["resultFileKey"] == ""
         assert message_body["status"] == "FAILURE"
 
     def test_given_long_request_id_when_sending_notification_then_handles_correctly(
@@ -177,8 +177,8 @@ class TestSQSHandler:
         assert "Messages" in messages
 
         message_body = json.loads(messages["Messages"][0]["Body"])
-        assert message_body["request_id"] == request_id
-        assert len(message_body["request_id"]) == 100
+        assert message_body["id"] == request_id
+        assert len(message_body["id"]) == 100
 
     def test_given_large_message_when_sending_notification_then_handles_correctly(
         self, aws_sqs_client
@@ -201,7 +201,7 @@ class TestSQSHandler:
         assert "Messages" in messages
 
         message_body = json.loads(messages["Messages"][0]["Body"])
-        assert message_body["result_s3_path"] == long_path
+        assert message_body["resultFileKey"] == long_path
 
     def test_given_message_body_when_sending_notification_then_formats_as_json(
         self, aws_sqs_client
@@ -227,8 +227,8 @@ class TestSQSHandler:
         message_body = json.loads(message_body_str)
         assert isinstance(message_body, dict)
         assert len(message_body) == 3
-        assert "request_id" in message_body
-        assert "result_s3_path" in message_body
+        assert "id" in message_body
+        assert "resultFileKey" in message_body
         assert "status" in message_body
 
     def test_given_sqs_client_when_checking_initialization_then_has_required_methods(
