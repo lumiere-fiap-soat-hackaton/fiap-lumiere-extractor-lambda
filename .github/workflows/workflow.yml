@@ -20,91 +20,131 @@ permissions:
   id-token: write
 
 jobs:
-  lint-and-test:
-    name: Lint and Test
+  build-and-test:
+    name: Construir Artefato, Executar Testes e Analisar Cobertura
     runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-    
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements-dev.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements-dev.txt
-    
-    - name: Lint with flake8
-      run: |
-        # Stop the build if there are Python syntax errors or undefined names
-        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    
-    - name: Format check with black
-      run: |
-        black --check src/
-    
-    - name: Run tests
-      run: |
-        python -m pytest tests/ -v --cov=src/ --cov-report=xml --cov-report=html
-    
-    - name: Upload coverage HTML report
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-html-report
-        path: htmlcov/
-        retention-days: 7
+    steps:
+      - name: Realizar Checkout do Código-fonte
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.ref }}
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Executar testes e gerar cobertura
+        run: |
+          python -m pytest tests/ -v --cov=src/ --cov-report=xml --cov-report=html
+
+      - name: Analisar com SonarCloud
+        uses: sonarsource/sonarcloud-github-action@v2
+        with:
+          args: >
+            -Dsonar.projectKey=lumiere-fiap-soat-hackaton_fiap-lumiere-extractor-lambda
+            -Dsonar.organization=lumiere-fiap-soat-hackaton
+            -Dsonar.sources=src
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.coverage.exclusions=**/common/**,**/__test__/**,**/main.py,**/configuration.py
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Validar Quality Gate do SonarCloud
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          echo "Aguardando análise do SonarCloud finalizar..."
+
+          PROJECT_KEY="lumiere-fiap-soat-hackaton_fiap-lumiere-extractor-lambda"
+          TASK_ID=$(curl -s -u $SONAR_TOKEN: "https://sonarcloud.io/api/ce/component?component=$PROJECT_KEY" | jq -r '.queue[0].id')
+
+          if [ -z "$TASK_ID" ] || [ "$TASK_ID" == "null" ]; then
+            echo "❌ Não foi possível encontrar o TASK_ID. A análise pode não ter iniciado."
+            exit 1
+          fi
+
+          STATUS="PENDING"
+          while [ "$STATUS" != "SUCCESS" ] && [ "$STATUS" != "FAILED" ]; do
+            echo "⏳ Status da análise: $STATUS"
+            sleep 5
+            STATUS=$(curl -s -u $SONAR_TOKEN: "https://sonarcloud.io/api/ce/task?id=$TASK_ID" | jq -r '.task.status')
+          done
+
+          if [ "$STATUS" != "SUCCESS" ]; then
+            echo "❌ A análise falhou no SonarCloud (status: $STATUS)"
+            exit 1
+          fi
+
+          ANALYSIS_ID=""
+          while [ -z "$ANALYSIS_ID" ] || [ "$ANALYSIS_ID" == "null" ]; do
+            echo "⏳ Aguardando analysisId da task..."
+            sleep 3
+            ANALYSIS_ID=$(curl -s -u $SONAR_TOKEN: "https://sonarcloud.io/api/ce/task?id=$TASK_ID" | jq -r '.task.analysisId')
+          done
+
+          echo "🔍 Validando Quality Gate para análise $ANALYSIS_ID..."
+
+          QUALITY_GATE_STATUS=$(curl -s -u $SONAR_TOKEN: \
+            "https://sonarcloud.io/api/qualitygates/project_status?analysisId=$ANALYSIS_ID" \
+            | jq -r '.projectStatus.status')
+
+          if [ "$QUALITY_GATE_STATUS" != "OK" ]; then
+            echo -e "\n❌ Quality Gate falhou! Detalhes:"
+            curl -s -u $SONAR_TOKEN: \
+              "https://sonarcloud.io/api/qualitygates/project_status?analysisId=$ANALYSIS_ID" \
+              | jq -r '.projectStatus.conditions[] | select(.status != "OK") | "- Critério: \(.metric)\n  Valor atual: \(.actual // \"n/a\")\n  Status: \(.status)\n"'
+            echo -e "\n🔗 Ver detalhes: https://sonarcloud.io/dashboard?id=$PROJECT_KEY"
+            exit 1
+          else
+            echo -e "\n✅ Quality Gate aprovado."
+          fi
 
   build-and-deploy:
-    needs: lint-and-test
+    needs: build-and-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-    
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-        aws-region: ${{ env.AWS_REGION }}
-    
-    - name: Build Lambda Layer and Function
-      run: |
-        # Make deploy script executable
-        chmod +x bin/deploy.sh
-        
-        # Use deploy script to build both layer and function
-        ./bin/deploy.sh build
-    
-    - name: Deploy Lambda Layer and Function
-      run: |
-        # Use deploy script for deployment
-        ./bin/deploy.sh deploy
-    
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: lambda-deployment-artifacts
-        path: |
-          ${{ env.DIST_DIR }}/lambda-function.zip
-          ${{ env.DIST_DIR }}/lambda-layer.zip
-        retention-days: 30
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Lambda Layer e Function
+        run: |
+          chmod +x bin/deploy.sh
+          ./bin/deploy.sh build
+
+      - name: Deploy Lambda Layer e Function
+        run: |
+          ./bin/deploy.sh deploy
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-deployment-artifacts
+          path: |
+            ${{ env.DIST_DIR }}/lambda-function.zip
+            ${{ env.DIST_DIR }}/lambda-layer.zip
+          retention-days: 30
