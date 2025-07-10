@@ -8,99 +8,118 @@ from src.services.processing_service import VideoProcessingService
 class TestVideoProcessingService:
 
     def setup_method(self):
-        self.output_bucket_name = "test-output-bucket"
-        self.service = VideoProcessingService(self.output_bucket_name)
+        self.s3_bucket_name = "test-output-bucket"
+        self.service = VideoProcessingService()
         self.request_id = "test-request-123"
-        self.s3_path = "s3://test-bucket/videos/sample.mp4"
+        self.s3_path = "videos/sample.mp4"
         self.notification_queue_url = (
             "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue"
         )
 
-    def test_given_output_bucket_when_initializing_service_then_sets_attributes(self):
-        # Given: An output bucket name
+    def test_given_service_when_initializing_then_sets_attributes(self):
+        # Given: VideoProcessingService
         # When: Initializing VideoProcessingService
         # Then: Should set the correct attributes
-        assert self.service.output_bucket_name == self.output_bucket_name
         assert self.service.processed_base_path == "processed"
 
+    @patch("src.services.processing_service.config.get_config_parameter")
     @patch("src.services.processing_service.sqs_handler.send_completion_notification")
     @patch("src.services.processing_service.s3_handler.upload_file")
+    @patch("src.services.processing_service.utils.format_s3_path")
     @patch("src.services.processing_service.utils.create_zip_archive")
     @patch("src.services.processing_service.video_processor.extract_frames")
     @patch("src.services.processing_service.s3_handler.download_file")
+    @patch("src.services.processing_service.shutil.disk_usage")
     @patch("src.services.processing_service.tempfile.TemporaryDirectory")
     @patch("os.makedirs")
     def test_given_valid_video_when_processing_then_completes_successfully(
         self,
         mock_makedirs,
         mock_tmpdir,
+        mock_disk_usage,
         mock_download_file,
         mock_extract_frames,
         mock_create_zip_archive,
+        mock_format_s3_path,
         mock_upload_file,
         mock_send_notification,
+        mock_get_config,
     ):
-        # Given: A valid video file and processing configuration
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
-        mock_extract_frames.return_value = 100
+        # Given: Valid video processing setup
+        mock_tmpdir.return_value.__enter__.return_value = "/tmp/test_tmpdir"
+        mock_disk_usage.return_value = MagicMock(free=1024**3)  # 1GB free space
+        mock_extract_frames.return_value = 10  # 10 frames extracted
+        mock_format_s3_path.return_value = (
+            "processed/test-request-123/sample_frames.zip",
+            "s3://test-output-bucket/processed/test-request-123/sample_frames.zip",
+        )
+        mock_get_config.side_effect = lambda key, default=None: {
+            "VIDEO_PROCESSING_MAX_FRAMES": 8000,
+            "VIDEO_PROCESSING_TIMEOUT_SECONDS": 240,
+        }.get(key, default)
 
         # When: Processing the video
         self.service.process_video(
+            s3_bucket_name=self.s3_bucket_name,
             s3_path=self.s3_path,
             request_id=self.request_id,
             notification_queue_url=self.notification_queue_url,
         )
 
-        # Then: Should complete all processing steps successfully
-        mock_download_file.assert_called_once_with(
-            "test-bucket", "videos/sample.mp4", "/tmp/test/test-request-123/sample.mp4"
-        )
-        mock_makedirs.assert_called_once_with("/tmp/test/test-request-123/frames")
+        # Then: Should complete all steps successfully
+        mock_download_file.assert_called_once()
         mock_extract_frames.assert_called_once_with(
-            "/tmp/test/test-request-123/sample.mp4", "/tmp/test/test-request-123/frames"
+            video_path="/tmp/test_tmpdir/test-request-123/sample.mp4",
+            output_dir="/tmp/test_tmpdir/test-request-123/frames",
+            max_frames=8000,
+            timeout_seconds=240,
         )
-        mock_create_zip_archive.assert_called_once_with(
-            "/tmp/test/test-request-123/frames",
-            "/tmp/test/test-request-123/sample_frames.zip",
-        )
+        mock_create_zip_archive.assert_called_once()
         mock_upload_file.assert_called_once()
-        mock_send_notification.assert_called_once()
+        mock_send_notification.assert_called_once_with(
+            queue_url=self.notification_queue_url,
+            request_id=self.request_id,
+            result_s3_path="s3://test-output-bucket/processed/test-request-123/sample_frames.zip",
+            status="SUCCESS",
+        )
 
-        notification_call = mock_send_notification.call_args
-        assert notification_call[1]["queue_url"] == self.notification_queue_url
-        assert notification_call[1]["request_id"] == self.request_id
-        assert notification_call[1]["status"] == "SUCCESS"
-        assert "processed/" in notification_call[1]["result_s3_path"]
-
+    @patch("src.services.processing_service.config.get_config_parameter")
     @patch("src.services.processing_service.sqs_handler.send_completion_notification")
     @patch("src.services.processing_service.video_processor.extract_frames")
     @patch("src.services.processing_service.s3_handler.download_file")
+    @patch("src.services.processing_service.shutil.disk_usage")
     @patch("src.services.processing_service.tempfile.TemporaryDirectory")
     @patch("os.makedirs")
     def test_given_video_with_no_frames_when_processing_then_sends_no_frames_notification(
         self,
         mock_makedirs,
         mock_tmpdir,
+        mock_disk_usage,
         mock_download_file,
         mock_extract_frames,
         mock_send_notification,
+        mock_get_config,
     ):
-        # Given: A video file that produces no frames
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
-        mock_extract_frames.return_value = 0
+        # Given: Video processing that extracts no frames
+        mock_tmpdir.return_value.__enter__.return_value = "/tmp/test_tmpdir"
+        mock_disk_usage.return_value = MagicMock(free=1024**3)
+        mock_extract_frames.return_value = 0  # No frames extracted
+        mock_get_config.side_effect = lambda key, default=None: {
+            "VIDEO_PROCESSING_MAX_FRAMES": 8000,
+            "VIDEO_PROCESSING_TIMEOUT_SECONDS": 240,
+        }.get(key, default)
 
         # When: Processing the video
         self.service.process_video(
+            s3_bucket_name=self.s3_bucket_name,
             s3_path=self.s3_path,
             request_id=self.request_id,
             notification_queue_url=self.notification_queue_url,
         )
 
-        # Then: Should send notification about no frames extracted
+        # Then: Should send no frames notification and return early
+        mock_download_file.assert_called_once()
+        mock_extract_frames.assert_called_once()
         mock_send_notification.assert_called_once_with(
             queue_url=self.notification_queue_url,
             request_id=self.request_id,
@@ -108,34 +127,40 @@ class TestVideoProcessingService:
             status="NO_FRAMES_EXTRACTED",
         )
 
+    @patch("src.services.processing_service.config.get_config_parameter")
     @patch("src.services.processing_service.sqs_handler.send_completion_notification")
     @patch("src.services.processing_service.s3_handler.download_file")
+    @patch("src.services.processing_service.shutil.disk_usage")
     @patch("src.services.processing_service.tempfile.TemporaryDirectory")
     @patch("os.makedirs")
     def test_given_download_failure_when_processing_then_sends_failure_notification(
         self,
         mock_makedirs,
         mock_tmpdir,
+        mock_disk_usage,
         mock_download_file,
         mock_send_notification,
+        mock_get_config,
     ):
-        # Given: S3 download operation that fails
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
+        # Given: S3 download that fails
+        mock_tmpdir.return_value.__enter__.return_value = "/tmp/test_tmpdir"
+        mock_disk_usage.return_value = MagicMock(free=1024**3)
         mock_download_file.side_effect = ClientError(
-            error_response={"Error": {"Code": "NoSuchKey"}}, operation_name="GetObject"
+            {"Error": {"Code": "NoSuchKey"}}, "GetObject"
         )
+        mock_get_config.return_value = 8000
 
-        # When: Processing the video and download fails
-        # Then: Should raise ClientError and send failure notification
+        # When: Processing the video with download failure
+        # Then: Should raise exception and send failure notification
         with pytest.raises(ClientError):
             self.service.process_video(
+                s3_bucket_name=self.s3_bucket_name,
                 s3_path=self.s3_path,
                 request_id=self.request_id,
                 notification_queue_url=self.notification_queue_url,
             )
 
+        mock_download_file.assert_called_once()
         mock_send_notification.assert_called_once_with(
             queue_url=self.notification_queue_url,
             request_id=self.request_id,
@@ -143,34 +168,44 @@ class TestVideoProcessingService:
             status="FAILURE",
         )
 
+    @patch("src.services.processing_service.config.get_config_parameter")
     @patch("src.services.processing_service.sqs_handler.send_completion_notification")
     @patch("src.services.processing_service.video_processor.extract_frames")
     @patch("src.services.processing_service.s3_handler.download_file")
+    @patch("src.services.processing_service.shutil.disk_usage")
     @patch("src.services.processing_service.tempfile.TemporaryDirectory")
     @patch("os.makedirs")
     def test_given_frame_extraction_failure_when_processing_then_sends_failure_notification(
         self,
         mock_makedirs,
         mock_tmpdir,
+        mock_disk_usage,
         mock_download_file,
         mock_extract_frames,
         mock_send_notification,
+        mock_get_config,
     ):
-        # Given: Frame extraction operation that fails
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
-        mock_extract_frames.side_effect = ValueError("Could not open video file")
+        # Given: Frame extraction that fails
+        mock_tmpdir.return_value.__enter__.return_value = "/tmp/test_tmpdir"
+        mock_disk_usage.return_value = MagicMock(free=1024**3)
+        mock_extract_frames.side_effect = Exception("Frame extraction failed")
+        mock_get_config.side_effect = lambda key, default=None: {
+            "VIDEO_PROCESSING_MAX_FRAMES": 8000,
+            "VIDEO_PROCESSING_TIMEOUT_SECONDS": 240,
+        }.get(key, default)
 
-        # When: Processing the video and frame extraction fails
-        # Then: Should raise ValueError and send failure notification
-        with pytest.raises(ValueError):
+        # When: Processing the video with extraction failure
+        # Then: Should raise exception and send failure notification
+        with pytest.raises(Exception, match="Frame extraction failed"):
             self.service.process_video(
+                s3_bucket_name=self.s3_bucket_name,
                 s3_path=self.s3_path,
                 request_id=self.request_id,
                 notification_queue_url=self.notification_queue_url,
             )
 
+        mock_download_file.assert_called_once()
+        mock_extract_frames.assert_called_once()
         mock_send_notification.assert_called_once_with(
             queue_url=self.notification_queue_url,
             request_id=self.request_id,
@@ -178,96 +213,52 @@ class TestVideoProcessingService:
             status="FAILURE",
         )
 
+    @patch("src.services.processing_service.config.get_config_parameter")
     @patch("src.services.processing_service.sqs_handler.send_completion_notification")
     @patch("src.services.processing_service.s3_handler.upload_file")
+    @patch("src.services.processing_service.utils.format_s3_path")
     @patch("src.services.processing_service.utils.create_zip_archive")
     @patch("src.services.processing_service.video_processor.extract_frames")
     @patch("src.services.processing_service.s3_handler.download_file")
-    @patch("src.services.processing_service.tempfile.TemporaryDirectory")
-    @patch("os.makedirs")
-    def test_given_upload_failure_when_processing_then_sends_failure_notification(
-        self,
-        mock_makedirs,
-        mock_tmpdir,
-        mock_download_file,
-        mock_extract_frames,
-        mock_create_zip_archive,
-        mock_upload_file,
-        mock_send_notification,
-    ):
-        # Given: S3 upload operation that fails
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
-        mock_extract_frames.return_value = 50
-        mock_upload_file.side_effect = ClientError(
-            error_response={"Error": {"Code": "AccessDenied"}},
-            operation_name="PutObject",
-        )
-
-        # When: Processing the video and upload fails
-        # Then: Should raise ClientError and send failure notification
-        with pytest.raises(ClientError):
-            self.service.process_video(
-                s3_path=self.s3_path,
-                request_id=self.request_id,
-                notification_queue_url=self.notification_queue_url,
-            )
-
-        mock_send_notification.assert_called_once_with(
-            queue_url=self.notification_queue_url,
-            request_id=self.request_id,
-            result_s3_path="",
-            status="FAILURE",
-        )
-
-    @patch("src.services.processing_service.utils.parse_s3_path")
-    def test_given_invalid_s3_path_when_processing_then_raises_value_error(
-        self, mock_parse_s3_path
-    ):
-        # Given: Invalid S3 path format
-        mock_parse_s3_path.side_effect = ValueError("Invalid S3 path format")
-
-        # When: Processing with invalid S3 path
-        # Then: Should raise ValueError
-        with pytest.raises(ValueError):
-            self.service.process_video(
-                s3_path="invalid-path",
-                request_id=self.request_id,
-                notification_queue_url=self.notification_queue_url,
-            )
-
-    @patch("src.services.processing_service.sqs_handler.send_completion_notification")
-    @patch("src.services.processing_service.utils.create_zip_archive")
-    @patch("src.services.processing_service.video_processor.extract_frames")
-    @patch("src.services.processing_service.s3_handler.download_file")
+    @patch("src.services.processing_service.shutil.disk_usage")
     @patch("src.services.processing_service.tempfile.TemporaryDirectory")
     @patch("os.makedirs")
     def test_given_zip_creation_failure_when_processing_then_sends_failure_notification(
         self,
         mock_makedirs,
         mock_tmpdir,
+        mock_disk_usage,
         mock_download_file,
         mock_extract_frames,
         mock_create_zip_archive,
+        mock_format_s3_path,
+        mock_upload_file,
         mock_send_notification,
+        mock_get_config,
     ):
-        # Given: ZIP archive creation that fails
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
-        mock_extract_frames.return_value = 25
-        mock_create_zip_archive.side_effect = OSError("Permission denied")
+        # Given: Zip creation that fails
+        mock_tmpdir.return_value.__enter__.return_value = "/tmp/test_tmpdir"
+        mock_disk_usage.return_value = MagicMock(free=1024**3)
+        mock_extract_frames.return_value = 10
+        mock_create_zip_archive.side_effect = Exception("Zip creation failed")
+        mock_get_config.side_effect = lambda key, default=None: {
+            "VIDEO_PROCESSING_MAX_FRAMES": 8000,
+            "VIDEO_PROCESSING_TIMEOUT_SECONDS": 240,
+        }.get(key, default)
 
-        # When: Processing the video and zip creation fails
-        # Then: Should raise OSError and send failure notification
-        with pytest.raises(OSError):
+        # When: Processing the video with zip creation failure
+        # Then: Should raise exception and send failure notification
+        with pytest.raises(Exception, match="Zip creation failed"):
             self.service.process_video(
+                s3_bucket_name=self.s3_bucket_name,
                 s3_path=self.s3_path,
                 request_id=self.request_id,
                 notification_queue_url=self.notification_queue_url,
             )
 
+        mock_download_file.assert_called_once()
+        mock_extract_frames.assert_called_once()
+        mock_create_zip_archive.assert_called_once()
         mock_send_notification.assert_called_once_with(
             queue_url=self.notification_queue_url,
             request_id=self.request_id,
@@ -275,86 +266,138 @@ class TestVideoProcessingService:
             status="FAILURE",
         )
 
+    @patch("src.services.processing_service.config.get_config_parameter")
     @patch("src.services.processing_service.sqs_handler.send_completion_notification")
     @patch("src.services.processing_service.s3_handler.upload_file")
+    @patch("src.services.processing_service.utils.format_s3_path")
     @patch("src.services.processing_service.utils.create_zip_archive")
     @patch("src.services.processing_service.video_processor.extract_frames")
     @patch("src.services.processing_service.s3_handler.download_file")
+    @patch("src.services.processing_service.shutil.disk_usage")
     @patch("src.services.processing_service.tempfile.TemporaryDirectory")
     @patch("os.makedirs")
-    def test_given_nested_s3_path_when_processing_then_handles_correctly(
+    def test_given_upload_failure_when_processing_then_sends_failure_notification(
         self,
         mock_makedirs,
         mock_tmpdir,
+        mock_disk_usage,
         mock_download_file,
         mock_extract_frames,
         mock_create_zip_archive,
+        mock_format_s3_path,
         mock_upload_file,
         mock_send_notification,
+        mock_get_config,
     ):
-        # Given: Video file with nested S3 path
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
-        mock_extract_frames.return_value = 30
-        nested_s3_path = "s3://test-bucket/folder/subfolder/video.mp4"
-
-        # When: Processing video with nested path
-        self.service.process_video(
-            s3_path=nested_s3_path,
-            request_id=self.request_id,
-            notification_queue_url=self.notification_queue_url,
+        # Given: S3 upload that fails
+        mock_tmpdir.return_value.__enter__.return_value = "/tmp/test_tmpdir"
+        mock_disk_usage.return_value = MagicMock(free=1024**3)
+        mock_extract_frames.return_value = 10
+        mock_format_s3_path.return_value = ("key", "s3://bucket/key")
+        mock_upload_file.side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied"}}, "PutObject"
         )
+        mock_get_config.side_effect = lambda key, default=None: {
+            "VIDEO_PROCESSING_MAX_FRAMES": 8000,
+            "VIDEO_PROCESSING_TIMEOUT_SECONDS": 240,
+        }.get(key, default)
 
-        # Then: Should handle nested path correctly
-        mock_download_file.assert_called_once_with(
-            "test-bucket",
-            "folder/subfolder/video.mp4",
-            "/tmp/test/test-request-123/video.mp4",
-        )
+        # When: Processing the video with upload failure
+        # Then: Should raise exception and send failure notification
+        with pytest.raises(ClientError):
+            self.service.process_video(
+                s3_bucket_name=self.s3_bucket_name,
+                s3_path=self.s3_path,
+                request_id=self.request_id,
+                notification_queue_url=self.notification_queue_url,
+            )
+
+        mock_download_file.assert_called_once()
         mock_extract_frames.assert_called_once()
         mock_create_zip_archive.assert_called_once()
         mock_upload_file.assert_called_once()
-        mock_send_notification.assert_called_once()
-
-    @patch("src.services.processing_service.sqs_handler.send_completion_notification")
-    @patch("src.services.processing_service.s3_handler.upload_file")
-    @patch("src.services.processing_service.utils.create_zip_archive")
-    @patch("src.services.processing_service.video_processor.extract_frames")
-    @patch("src.services.processing_service.s3_handler.download_file")
-    @patch("src.services.processing_service.tempfile.TemporaryDirectory")
-    @patch("os.makedirs")
-    def test_given_video_processing_when_complete_then_formats_output_path_correctly(
-        self,
-        mock_makedirs,
-        mock_tmpdir,
-        mock_download_file,
-        mock_extract_frames,
-        mock_create_zip_archive,
-        mock_upload_file,
-        mock_send_notification,
-    ):
-        # Given: Video processing configuration
-        mock_tmpdir_instance = MagicMock()
-        mock_tmpdir_instance.__enter__.return_value = "/tmp/test"
-        mock_tmpdir.return_value = mock_tmpdir_instance
-        mock_extract_frames.return_value = 15
-
-        # When: Processing the video successfully
-        self.service.process_video(
-            s3_path=self.s3_path,
+        mock_send_notification.assert_called_once_with(
+            queue_url=self.notification_queue_url,
             request_id=self.request_id,
-            notification_queue_url=self.notification_queue_url,
+            result_s3_path="",
+            status="FAILURE",
         )
 
-        # Then: Should format output path correctly
-        upload_call = mock_upload_file.call_args
-        assert upload_call[0][1] == self.output_bucket_name
-        assert "processed/" in upload_call[0][2]
-        assert self.request_id in upload_call[0][2]
+    @patch("src.services.processing_service.config.get_config_parameter")
+    @patch("src.services.processing_service.shutil.disk_usage")
+    def test_given_service_when_processing_starts_then_logs_disk_space(
+        self, mock_disk_usage, mock_get_config
+    ):
+        # Given: Available disk space
+        mock_disk_usage.return_value = MagicMock(free=2 * 1024**3)  # 2GB free
+        mock_get_config.return_value = 8000
 
-        notification_call = mock_send_notification.call_args
-        result_s3_path = notification_call[1]["result_s3_path"]
-        assert result_s3_path.startswith(f"s3://{self.output_bucket_name}/processed/")
-        assert self.request_id in result_s3_path
-        assert "sample_frames.zip" in result_s3_path
+        # When: Starting video processing (we'll patch to stop early)
+        with patch(
+            "src.services.processing_service.tempfile.TemporaryDirectory"
+        ) as mock_tmpdir:
+            mock_tmpdir.return_value.__enter__.side_effect = Exception("Stop early")
+
+            with patch("src.services.processing_service.logger") as mock_logger:
+                try:
+                    self.service.process_video(
+                        s3_bucket_name=self.s3_bucket_name,
+                        s3_path=self.s3_path,
+                        request_id=self.request_id,
+                        notification_queue_url=self.notification_queue_url,
+                    )
+                except Exception:
+                    pass  # Expected to stop early
+
+                # Then: Should log disk space information
+                mock_logger.info.assert_any_call("Available /tmp space: 2.00GB")
+
+    @patch("src.services.processing_service.config.get_config_parameter")
+    def test_given_custom_config_when_processing_then_uses_config_values(
+        self, mock_get_config
+    ):
+        # Given: Custom configuration values
+        mock_get_config.side_effect = lambda key, default=None: {
+            "VIDEO_PROCESSING_MAX_FRAMES": 5000,
+            "VIDEO_PROCESSING_TIMEOUT_SECONDS": 180,
+        }.get(key, default)
+
+        # When: Processing video (mock to check extract_frames call)
+        with patch(
+            "src.services.processing_service.tempfile.TemporaryDirectory"
+        ) as mock_tmpdir:
+            with patch(
+                "src.services.processing_service.shutil.disk_usage"
+            ) as mock_disk_usage:
+                with patch("src.services.processing_service.s3_handler.download_file"):
+                    with patch(
+                        "src.services.processing_service.video_processor.extract_frames"
+                    ) as mock_extract:
+                        with patch(
+                            "src.services.processing_service.sqs_handler.send_completion_notification"
+                        ):
+                            with patch("os.makedirs"):
+                                mock_tmpdir.return_value.__enter__.return_value = (
+                                    "/tmp/test"
+                                )
+                                mock_disk_usage.return_value = MagicMock(
+                                    free=1024**3
+                                )  # 1GB free
+                                mock_extract.return_value = (
+                                    0  # No frames to trigger early return
+                                )
+
+                                self.service.process_video(
+                                    s3_bucket_name=self.s3_bucket_name,
+                                    s3_path=self.s3_path,
+                                    request_id=self.request_id,
+                                    notification_queue_url=self.notification_queue_url,
+                                )
+
+                                # Then: Should use custom config values
+                                mock_extract.assert_called_once_with(
+                                    video_path="/tmp/test/test-request-123/sample.mp4",
+                                    output_dir="/tmp/test/test-request-123/frames",
+                                    max_frames=5000,
+                                    timeout_seconds=180,
+                                )

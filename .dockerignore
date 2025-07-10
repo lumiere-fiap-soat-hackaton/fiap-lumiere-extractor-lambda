@@ -30,6 +30,7 @@ venv.bak/
 dist/
 
 # Unit test / coverage reports
+tests/
 htmlcov/
 .tox/
 .coverage
