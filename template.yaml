@@ -6,7 +6,7 @@ Description: >
 Parameters:
   BucketName:
     Type: String
-    Default: fiap-video-processor-bucket
+    Default: fiap-lumiere-result-files-events-queue
     Description: The name of the S3 bucket for source videos and processed output.
 
 Resources:
@@ -29,23 +29,6 @@ Resources:
     Type: AWS::SQS::Queue
     Description: Dead-letter queue for the ProcessVideoCompletedQueue.
 
-  # --- SSM Parameters ---
-  BucketParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /fiap-video-processor/video-processor/bucket-name'
-      Type: String
-      Value: !Ref VideoProcessingBucket
-      Description: S3 bucket name for video processing
-
-  NotificationQueueUrlParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /fiap-video-processor/video-processor/notification-queue-url'
-      Type: String
-      Value: !Ref ProcessVideoCompletedQueue
-      Description: SQS queue URL for processing completion notifications
-
   DependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -67,14 +50,19 @@ Resources:
       Runtime: python3.9
       CodeUri: .
       Handler: src/lambda_function.lambda_handler
-      Timeout: 300
-      MemorySize: 1024
+      Timeout: 900
+      MemorySize: 3008
+      EphemeralStorage:
+        Size: 10240
       Layers:
         - !Ref DependenciesLayer
       Environment:
         Variables:
-          NOTIFICATION_QUEUE_URL: !Ref ProcessVideoCompletedQueue
-          OUTPUT_BUCKET_NAME: !Ref VideoProcessingBucket
+          MEDIA_RESULT_QUEUE_NAME: !Ref ProcessVideoCompletedQueue
+          S3_BUCKET_NAME: !Ref VideoProcessingBucket
+          LOG_LEVEL: INFO
+          VIDEO_PROCESSING_MAX_FRAMES: 5000
+          VIDEO_PROCESSING_TIMEOUT_SECONDS: 600
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref BucketName
