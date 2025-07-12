@@ -39,7 +39,7 @@ def lambda_handler(event: dict, context: object):
 
             # 2. Invoke the core application logic
             processing_svc.process_video(
-                s3_path=s3_path,
+                s3_key=s3_path,
                 request_id=request_id,
                 s3_bucket_name=S3_BUCKET_NAME,
                 notification_queue_url=MEDIA_RESULT_QUEUE_NAME,

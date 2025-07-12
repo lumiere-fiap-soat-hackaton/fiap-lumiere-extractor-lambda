@@ -22,8 +22,8 @@ def format_s3_path(bucket: str, base_path: str, request_id: str, key: str) -> st
     if not bucket or not key:
         raise ValueError("Both bucket and key must be provided.")
     current_date = datetime.now().strftime("%Y-%m-%d")
-    object_key = f"{base_path}/{current_date}/{request_id}/{key}"
-    return object_key, f"s3://{bucket}/{object_key}"
+    object_key = f"{base_path}/{current_date}/{key}"
+    return object_key
 
 
 def parse_s3_path(s3_path: str) -> Tuple[str, str]:

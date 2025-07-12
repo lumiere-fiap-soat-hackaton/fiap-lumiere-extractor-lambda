@@ -52,6 +52,8 @@ Resources:
       Handler: src/lambda_function.lambda_handler
       Timeout: 900
       MemorySize: 3008
+      EphemeralStorage:
+        Size: 10240
       Layers:
         - !Ref DependenciesLayer
       Environment:
@@ -59,6 +61,8 @@ Resources:
           MEDIA_RESULT_QUEUE_NAME: !Ref ProcessVideoCompletedQueue
           S3_BUCKET_NAME: !Ref VideoProcessingBucket
           LOG_LEVEL: INFO
+          VIDEO_PROCESSING_MAX_FRAMES: 5000
+          VIDEO_PROCESSING_TIMEOUT_SECONDS: 600
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref BucketName
