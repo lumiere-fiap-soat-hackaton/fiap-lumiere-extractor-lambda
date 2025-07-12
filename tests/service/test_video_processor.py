@@ -355,7 +355,7 @@ class TestVideoProcessor:
             # Then: Should log progress at frame 50 and 100
             progress_calls = [
                 call
-                for call in mock_logger.info.call_args_list
+                for call in mock_logger.debug.call_args_list
                 if "Extracted" in str(call) and "frames in" in str(call)
             ]
             assert len(progress_calls) >= 2  # Should have progress logs at 50 and 100

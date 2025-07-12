@@ -62,8 +62,14 @@ class VideoProcessingService:
                 s3_handler.download_file(source_bucket, source_key, local_video_path)
 
                 # Process the video to extract frames with Lambda-optimized settings
-                max_frames = int(config.get_config_parameter("VIDEO_PROCESSING_MAX_FRAMES", "5000"))
-                timeout_seconds = int(config.get_config_parameter("VIDEO_PROCESSING_TIMEOUT_SECONDS", "240"))
+                max_frames = int(
+                    config.get_config_parameter("VIDEO_PROCESSING_MAX_FRAMES", "20000")
+                )
+                timeout_seconds = int(
+                    config.get_config_parameter(
+                        "VIDEO_PROCESSING_TIMEOUT_SECONDS", "240"
+                    )
+                )
 
                 # Process the video to extract frames
                 frame_count = video_processor.extract_frames(
@@ -108,7 +114,9 @@ class VideoProcessingService:
                     status="SUCCESS",
                 )
 
-                logger.info(f"Successfully completed workflow for request {request_id}. ")
+                logger.info(
+                    f"Successfully completed workflow for request {request_id}. "
+                )
             except Exception as e:
                 logger.error(f"Error processing video for request {request_id}: {e}")
                 # Notify failure via SQS
