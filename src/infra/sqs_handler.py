@@ -2,6 +2,7 @@ import json
 import logging
 import boto3
 from botocore.exceptions import ClientError
+from ..common.utils import format_sqs_message
 
 logger = logging.getLogger(__name__)
 sqs_client = boto3.client("sqs")
@@ -21,11 +22,7 @@ def send_completion_notification(
     Raises:
         ClientError: If the message fails to be sent.
     """
-    message_body = {
-        "request_id": request_id,
-        "result_s3_path": result_s3_path,
-        "status": status,
-    }
+    message_body = format_sqs_message(request_id, result_s3_path, status)
 
     try:
         logger.info(

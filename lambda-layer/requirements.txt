@@ -1,2 +1,4 @@
 # Dependencies to be packaged in the Lambda Layer
-opencv-python-headless
+# Using specific versions that are compatible with AWS Lambda
+opencv-python-headless==4.8.1.78
+numpy==1.24.4

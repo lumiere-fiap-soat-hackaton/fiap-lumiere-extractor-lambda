@@ -1,0 +1,65 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Distribution / packaging
+.env
+.venv
+venv/
+ENV/
+env.bak/
+venv.bak/
+dist/
+
+# Unit test / coverage reports
+tests/
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# AWS SAM / Serverless
+.aws-sam/
+.serverless/
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+
+# Local development
+.git
+.gitignore
+.github
+*.md

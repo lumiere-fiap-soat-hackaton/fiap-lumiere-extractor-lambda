@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Local deployment script for FIAP Lumiere Media Processor Lambda
-# This script helps with local testing and manual deployment
+# Simplified deployment script for FIAP Lumiere Media Processor Lambda
+# Builds using Docker and deploys via S3
 
 set -e
 
@@ -15,19 +15,51 @@ S3_BUCKET="${S3_BUCKET:-fiap-lumiere-lambda-code-bucket}"
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 print_status() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Build Lambda layer and function using Docker
+build() {
+    print_status "Building Lambda layer and function using Docker..."
+    
+    # Check if Docker is available
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed or not available in PATH."
+        exit 1
+    fi
+    
+    # Check if Docker daemon is running
+    if ! docker info &> /dev/null; then
+        print_error "Docker daemon is not running. Please start Docker daemon and try again."
+        exit 1
+    fi
+    
+    # Clean previous build
+    rm -rf $DIST_DIR
+    mkdir -p $DIST_DIR
+    
+    # Build and extract artifacts using Docker
+    docker build --target export --output $DIST_DIR .
+    
+    print_status "Build completed successfully."
+    
+    # Show file sizes
+    if [ -f "$DIST_DIR/lambda-layer.zip" ]; then
+        LAYER_SIZE=$(du -h $DIST_DIR/lambda-layer.zip | cut -f1)
+        print_status "Lambda layer built (Size: $LAYER_SIZE)."
+    fi
+    
+    if [ -f "$DIST_DIR/lambda-function.zip" ]; then
+        FUNCTION_SIZE=$(du -h $DIST_DIR/lambda-function.zip | cut -f1)
+        print_status "Lambda function built (Size: $FUNCTION_SIZE)."
+    fi
 }
 
 # Check if AWS CLI is configured
@@ -40,191 +72,54 @@ check_aws_config() {
     print_status "AWS CLI is configured."
 }
 
-# Run tests
-run_tests() {
-    print_status "Running tests..."
-    python -m pytest tests/ -v --cov=src/
-    if [ $? -eq 0 ]; then
-        print_status "All tests passed!"
-    else
-        print_error "Tests failed. Fix issues before deploying."
-        exit 1
-    fi
-}
-
-# Build Lambda layer
-build_layer() {
-    print_status "Building Lambda layer..."
-    
-    # Clean previous build
-    rm -rf $DIST_DIR/layer $DIST_DIR/lambda-layer.zip
-    
-    # Create layer directory structure
-    mkdir -p $DIST_DIR/layer/python/lib/python3.9/site-packages
-    
-    # Install layer dependencies
-    pip install -r lambda-layer/requirements.txt -t $DIST_DIR/layer/python/lib/python3.9/site-packages/
-    
-    # Create layer zip
-    cd $DIST_DIR/layer
-    zip -r ../lambda-layer.zip .
-    cd ../..
-    
-    print_status "Lambda layer built successfully."
-}
-
-# Build Lambda function
-build_function() {
-    print_status "Building Lambda function..."
-    
-    # Clean previous build
-    rm -rf $DIST_DIR/function $DIST_DIR/lambda-function.zip
-    
-    # Create function directory
-    mkdir -p $DIST_DIR/function
-    
-    # Copy source code
-    cp -r src/* $DIST_DIR/function/
-    
-    # Install function dependencies (if any)
-    if [ -f requirements.txt ]; then
-        pip install -r requirements.txt -t $DIST_DIR/function/
-    fi
-    
-    # Create function zip
-    cd $DIST_DIR/function
-    zip -r ../lambda-function.zip .
-    cd ../..
-    
-    print_status "Lambda function built successfully."
-}
-
-# Upload artifacts to S3
-upload_artifacts() {
+# Upload artifacts to S3 and deploy
+deploy() {
     print_status "Uploading artifacts to S3..."
     
-    # Create S3 keys with timestamp for versioning
+    # Create S3 keys with timestamp
     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
     LAYER_S3_KEY="layers/lambda-layer-${TIMESTAMP}.zip"
     FUNCTION_S3_KEY="functions/lambda-function-${TIMESTAMP}.zip"
     
-    # Upload layer zip to S3
-    aws s3 cp $DIST_DIR/lambda-layer.zip s3://$S3_BUCKET/$LAYER_S3_KEY \
-        --region $AWS_REGION
+    # Upload to S3
+    aws s3 cp $DIST_DIR/lambda-layer.zip s3://$S3_BUCKET/$LAYER_S3_KEY --region $AWS_REGION
+    aws s3 cp $DIST_DIR/lambda-function.zip s3://$S3_BUCKET/$FUNCTION_S3_KEY --region $AWS_REGION
     
-    # Upload function zip to S3
-    aws s3 cp $DIST_DIR/lambda-function.zip s3://$S3_BUCKET/$FUNCTION_S3_KEY \
-        --region $AWS_REGION
-    
-    # Store S3 keys for deployment
-    echo $LAYER_S3_KEY > .layer_s3_key
-    echo $FUNCTION_S3_KEY > .function_s3_key
-    
-    print_status "Artifacts uploaded successfully to S3."
-}
-
-# Deploy Lambda layer
-deploy_layer() {
     print_status "Deploying Lambda layer..."
+    LAYER_ARN=$(aws lambda publish-layer-version \
+        --layer-name $LAYER_NAME \
+        --description "Dependencies for FIAP Lumiere - $(date)" \
+        --content S3Bucket=$S3_BUCKET,S3Key=$LAYER_S3_KEY \
+        --compatible-runtimes python3.9 \
+        --region $AWS_REGION \
+        --query 'LayerVersionArn' \
+        --output text)
     
-    # Get S3 key for layer
-    if [ -f .layer_s3_key ]; then
-        LAYER_S3_KEY=$(cat .layer_s3_key)
-        print_status "Using layer from S3: s3://$S3_BUCKET/$LAYER_S3_KEY"
-        
-        LAYER_ARN=$(aws lambda publish-layer-version \
-            --layer-name $LAYER_NAME \
-            --description "Dependencies for FIAP Lumiere Media Processor Lambda - $(date)" \
-            --content S3Bucket=$S3_BUCKET,S3Key=$LAYER_S3_KEY \
-            --compatible-runtimes python3.9 \
-            --region $AWS_REGION \
-            --query 'LayerVersionArn' \
-            --output text)
-    else
-        print_status "Using local layer zip file..."
-        LAYER_ARN=$(aws lambda publish-layer-version \
-            --layer-name $LAYER_NAME \
-            --description "Dependencies for FIAP Lumiere Media Processor Lambda - $(date)" \
-            --zip-file fileb://$DIST_DIR/lambda-layer.zip \
-            --compatible-runtimes python3.9 \
-            --region $AWS_REGION \
-            --query 'LayerVersionArn' \
-            --output text)
-    fi
-    
-    print_status "Layer deployed successfully: $LAYER_ARN"
-    echo $LAYER_ARN > .layer_arn
-}
-
-# Deploy Lambda function
-deploy_function() {
     print_status "Deploying Lambda function..."
-    
-    # Get S3 key for function
-    if [ -f .function_s3_key ]; then
-        FUNCTION_S3_KEY=$(cat .function_s3_key)
-        print_status "Using function from S3: s3://$S3_BUCKET/$FUNCTION_S3_KEY"
-        
-        # Update function code from S3
-        aws lambda update-function-code \
-            --function-name $LAMBDA_FUNCTION_NAME \
-            --s3-bucket $S3_BUCKET \
-            --s3-key $FUNCTION_S3_KEY \
-            --region $AWS_REGION
-    else
-        print_status "Using local function zip file..."
-        # Update function code from local file
-        aws lambda update-function-code \
-            --function-name $LAMBDA_FUNCTION_NAME \
-            --zip-file fileb://$DIST_DIR/lambda-function.zip \
-            --region $AWS_REGION
-    fi
-    
-    # Wait for the update to complete
-    print_status "Waiting for function update to complete..."
-    aws lambda wait function-updated \
+    aws lambda update-function-code \
         --function-name $LAMBDA_FUNCTION_NAME \
+        --s3-bucket $S3_BUCKET \
+        --s3-key $FUNCTION_S3_KEY \
         --region $AWS_REGION
     
-    # Update function configuration to use the new layer version
-    if [ -f .layer_arn ]; then
-        LAYER_ARN=$(cat .layer_arn)
-        print_status "Updating function configuration with new layer..."
-        aws lambda update-function-configuration \
-            --function-name $LAMBDA_FUNCTION_NAME \
-            --layers $LAYER_ARN \
-            --region $AWS_REGION
-        
-        # Wait for the configuration update to complete
-        aws lambda wait function-updated \
-            --function-name $LAMBDA_FUNCTION_NAME \
-            --region $AWS_REGION
-    fi
+    # Wait for update and configure layer
+    aws lambda wait function-updated --function-name $LAMBDA_FUNCTION_NAME --region $AWS_REGION
     
-    print_status "Lambda function deployed successfully."
-}
-
-# Verify deployment
-verify_deployment() {
-    print_status "Verifying deployment..."
-    
-    FUNCTION_INFO=$(aws lambda get-function \
+    aws lambda update-function-configuration \
         --function-name $LAMBDA_FUNCTION_NAME \
-        --region $AWS_REGION \
-        --query 'Configuration.[FunctionName,Runtime,Handler,LastModified]' \
-        --output table)
+        --layers $LAYER_ARN \
+        --handler src/lambda_function.lambda_handler \
+        --runtime python3.9 \
+        --region $AWS_REGION
     
-    print_status "Function deployment verified:"
-    echo "$FUNCTION_INFO"
+    print_status "Deployment completed successfully!"
+    print_status "Layer ARN: $LAYER_ARN"
 }
 
 # Clean up build artifacts
 cleanup() {
     print_status "Cleaning up build artifacts..."
     rm -rf $DIST_DIR
-    rm -f .layer_arn
-    rm -f .layer_s3_key
-    rm -f .function_s3_key
     print_status "Cleanup complete."
 }
 
@@ -233,58 +128,39 @@ show_help() {
     echo "Usage: $0 [OPTION]"
     echo ""
     echo "Options:"
-    echo "  test          Run tests only"
-    echo "  build         Build Lambda function and layer"
-    echo "  deploy        Deploy Lambda function and layer to AWS"
-    echo "  full          Run tests, build, and deploy (default)"
-    echo "  clean         Clean build artifacts"
-    echo "  help          Show this help message"
+    echo "  build     Build Lambda function and layer using Docker"
+    echo "  deploy    Deploy Lambda function and layer to AWS via S3"
+    echo "  full      Build and deploy (default)"
+    echo "  clean     Clean build artifacts"
+    echo "  help      Show this help message"
     echo ""
-    echo "Environment Configuration:"
+    echo "Environment Variables:"
     echo "  S3_BUCKET: $S3_BUCKET"
     echo "  AWS_REGION: $AWS_REGION"
     echo "  LAMBDA_FUNCTION_NAME: $LAMBDA_FUNCTION_NAME"
     echo "  DEPENDENCY_LAYER_NAME: $LAYER_NAME"
-    echo "  DIST_DIR: $DIST_DIR"
     echo ""
     echo "Examples:"
-    echo "  $0            # Run full pipeline"
-    echo "  $0 test       # Run tests only"
-    echo "  $0 build      # Build only"
-    echo "  $0 deploy     # Deploy only (requires existing build)"
-    echo "  $0 clean      # Clean build artifacts"
-    echo ""
-    echo "Note: The deploy command uploads artifacts to S3 bucket: $S3_BUCKET"
-    echo "      and deploys Lambda function and layer from S3."
+    echo "  $0        # Build and deploy"
+    echo "  $0 build  # Build only"
+    echo "  $0 deploy # Deploy only (requires existing build)"
+    echo "  $0 clean  # Clean build artifacts"
 }
 
 # Main function
 main() {
     case "${1:-full}" in
-        test)
-            check_aws_config
-            run_tests
-            ;;
         build)
-            build_layer
-            build_function
+            build
             ;;
         deploy)
             check_aws_config
-            upload_artifacts
-            deploy_layer
-            deploy_function
-            verify_deployment
+            deploy
             ;;
         full)
             check_aws_config
-            run_tests
-            build_layer
-            build_function
-            upload_artifacts
-            deploy_layer
-            deploy_function
-            verify_deployment
+            build
+            deploy
             ;;
         clean)
             cleanup

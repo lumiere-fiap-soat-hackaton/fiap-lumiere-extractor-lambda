@@ -19,13 +19,11 @@ class TestUtilsFunctions:
         # When: Formatting S3 path with mocked datetime
         with patch("src.common.utils.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "2024-01-15"
-            object_key, s3_path = format_s3_path(bucket, base_path, request_id, key)
+            object_key = format_s3_path(bucket, base_path, request_id, key)
 
-        # Then: Should return properly formatted paths
-        expected_object_key = "videos/2024-01-15/req-123/output.zip"
-        expected_s3_path = "s3://test-bucket/videos/2024-01-15/req-123/output.zip"
+        # Then: Should return properly formatted path
+        expected_object_key = "videos/2024-01-15/output.zip"
         assert object_key == expected_object_key
-        assert s3_path == expected_s3_path
 
     def test_given_empty_bucket_when_formatting_s3_path_then_raises_value_error(self):
         # Given: Empty bucket parameter
@@ -65,13 +63,11 @@ class TestUtilsFunctions:
         # When: Formatting S3 path with special characters
         with patch("src.common.utils.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "2024-12-25"
-            object_key, s3_path = format_s3_path(bucket, base_path, request_id, key)
+            object_key = format_s3_path(bucket, base_path, request_id, key)
 
         # Then: Should handle special characters correctly
-        expected_object_key = "videos/processed/2024-12-25/req-456-abc/output_file.zip"
-        expected_s3_path = "s3://test-bucket-123/videos/processed/2024-12-25/req-456-abc/output_file.zip"
+        expected_object_key = "videos/processed/2024-12-25/output_file.zip"
         assert object_key == expected_object_key
-        assert s3_path == expected_s3_path
 
     def test_given_valid_s3_path_when_parsing_then_returns_bucket_and_key(self):
         # Given: Valid S3 path

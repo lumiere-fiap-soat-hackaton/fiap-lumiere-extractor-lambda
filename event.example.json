@@ -1,19 +1,19 @@
 {
   "Records": [
     {
-      "messageId": "19dd0b57-b21e-4ac1-bd88-01bbb068cb78",
-      "receiptHandle": "MessageReceiptHandle",
-      "body": "{\"s3_path\": \"s3://fiap-video-processor-bucket/videos/b8a5e5a2-39c2-4a0b-99f8-5be4523e13d9/NyanCat.mp4\", \"request_id\": \"b8a5e5a2-39c2-4a0b-99f8-5be4523e13d9\"}",
+      "messageId": "c0af2bde-6425-461b-bb9f-039feac5b875",
+      "receiptHandle": "AQEBNenDg6BHmJZeY9yeAKNlVEVYLxHth3ECebPIUHqNs5MpcUKuWFrUe1ViMbIKdeY77WZ7eA4fo9p1fFLcWe//yoi1Ram5uhi5NEqam6xaLk8zLL4u07XVQTIuNhmezAmEujQo1NPenPvLKipXm6E8UzKcaj6AOHMp8NL5F8n7YpArKcZwRgGn0nS2fz9dBHZmeEYZgtH8Z8OxpPNAVwHB4dqYFWiSueaVp/TtZavuTgSP4LZRbED706abx5om0QkNAjph9N1UkhG2lv1sYskVEH6YCgwgVhjkuOvZ5yx1/i4F54u0sUcGsUmkn89qj4T+21KyU9JwY7dphG4vdEeLePEK5cF3jvriC1i9j2EHw1EvV9OZUDdz6ZiTnKrcFGTK7GNsomplP8W6vSF9RxARbJPJU5qWGJt5t2qdd7kfw+4=",
+      "body": "{\n    \"userId\": \"54da2f28-7a36-48a5-974a-72220f8ece68\",\n    \"sourceFileKey\": \"videos/54da2f28-7a36-48a5-974a-72220f8ece68-NyanCat.mp4\",\n    \"sourceFileName\": \"54da2f28-7a36-48a5-974a-72220f8ece68-NyanCat.mp4\",\n    \"id\": \"3286359c-4577-426d-a13f-0e4f3cea192c\",\n    \"status\": \"pending\",\n    \"createdAt\": \"2025-07-10T02:59:21.985Z\",\n    \"updatedAt\": \"2025-07-10T02:59:21.985Z\"\n}",
       "attributes": {
         "ApproximateReceiveCount": "1",
-        "SentTimestamp": "1523232000000",
-        "SenderId": "AIDAISD5355EXAMPLE",
-        "ApproximateFirstReceiveTimestamp": "1523232000001"
+        "SentTimestamp": "1752118937529",
+        "SenderId": "AROA5FAHL52XQK2EZIE3V:user3746009=wesley.sangalli@gmail.com",
+        "ApproximateFirstReceiveTimestamp": "1752118937540"
       },
       "messageAttributes": {},
-      "md5OfBody": "some-md5-hash",
+      "md5OfBody": "d2a448ee3ae092d66124de411024d132",
       "eventSource": "aws:sqs",
-      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:VideoQueue",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:904106077871:fiap-lumiere-process-files-request-queue",
       "awsRegion": "us-east-1"
     }
   ]
